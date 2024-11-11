@@ -1,0 +1,142 @@
+import sys
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QLabel, QPushButton,
+                             QVBoxLayout, QLineEdit, QMessageBox, QWidget, QComboBox, QDateEdit, QInputDialog)
+from PyQt5.QtCore import Qt, QDate
+from datetime import datetime
+
+# Room Data with Prices
+rooms = {
+    "101": {"type": "Single", "price_per_night": 5800, "available": True},
+    "102": {"type": "Double", "price_per_night": 8700, "available": True},
+    "103": {"type": "Suite", "price_per_night": 17400, "available": True},
+    # Add other rooms here as needed
+}
+
+# Customer data
+customers = {}
+
+class HotelReservationSystem(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Hotel Reservation System")
+        self.setGeometry(200, 200, 600, 500)
+        self.setupUI()
+
+    def setupUI(self):
+        layout = QVBoxLayout()
+
+        # Header
+        header = QLabel("HOTEL DE LUNA", self)
+        header.setAlignment(Qt.AlignCenter)
+        header.setStyleSheet("font-size: 24px; font-weight: bold; color: #444;")
+        layout.addWidget(header)
+
+        # Name input
+        self.name_input = QLineEdit(self)
+        self.name_input.setPlaceholderText("Enter your name (Last, First)")
+        layout.addWidget(self.name_input)
+
+        # Room Selection
+        self.room_combo = QComboBox(self)
+        self.room_combo.addItem("Select a room")
+        for room, info in rooms.items():
+            self.room_combo.addItem(f"Room {room} - {info['type']} (₱{info['price_per_night']}/night)", room)
+        layout.addWidget(self.room_combo)
+
+        # Date inputs
+        self.check_in_date = self.create_date_edit()
+        layout.addWidget(QLabel("Check-in Date"))
+        layout.addWidget(self.check_in_date)
+
+        self.check_out_date = self.create_date_edit(1)
+        layout.addWidget(QLabel("Check-out Date"))
+        layout.addWidget(self.check_out_date)
+
+        # Buttons
+        self.add_button(layout, "Check Room Availability", self.check_availability)
+        self.add_button(layout, "Book Room", self.book_room)
+        self.add_button(layout, "View Bookings", self.view_bookings)
+        self.add_button(layout, "View Loyalty Points", self.view_loyalty_points)
+        self.add_button(layout, "Cancel Booking", self.cancel_booking)
+
+        # Set layout
+        container = QWidget()
+        container.setLayout(layout)
+        self.setCentralWidget(container)
+
+    def create_date_edit(self, days_ahead=0):
+        date_edit = QDateEdit(self)
+        date_edit.setCalendarPopup(True)
+        date_edit.setDate(QDate.currentDate().addDays(days_ahead))
+        return date_edit
+
+    def add_button(self, layout, text, func):
+        button = QPushButton(text, self)
+        button.clicked.connect(func)
+        layout.addWidget(button)
+
+    def check_availability(self):
+        available_rooms = "\n".join(
+            [f"Room {room}: {info['type']} - ₱{info['price_per_night']}/night"
+             for room, info in rooms.items() if info['available']]
+        )
+        QMessageBox.information(self, "Available Rooms", available_rooms)
+
+    def book_room(self):
+        name = self.name_input.text().strip()
+        room = self.room_combo.currentData()
+        if not name or room is None:
+            QMessageBox.warning(self, "Input Error", "Please enter your name and select a room.")
+            return
+
+        check_in = self.check_in_date.date().toString("yyyy-MM-dd")
+        check_out = self.check_out_date.date().toString("yyyy-MM-dd")
+        nights = (datetime.strptime(check_out, "%Y-%m-%d") - datetime.strptime(check_in, "%Y-%m-%d")).days
+
+        if nights <= 0:
+            QMessageBox.warning(self, "Input Error", "Check-out date must be after check-in date.")
+            return
+
+        total_cost = nights * rooms[room]['price_per_night']
+        cash, ok = QInputDialog.getDouble(self, "Cash Payment", "Enter cash amount:", min=0)
+        if ok and cash >= total_cost:
+            rooms[room]["available"] = False
+            change = cash - total_cost
+            loyalty_points = 30
+            customers[name] = {"room": room, "check_in": check_in, "check_out": check_out,
+                               "cost": total_cost, "points": loyalty_points}
+
+            QMessageBox.information(self, "Payment Successful", f"Change: ₱{change:.2f}\nLoyalty Points Earned: {loyalty_points}")
+        else:
+            QMessageBox.warning(self, "Payment Error", "Insufficient cash.")
+
+    def view_bookings(self):
+        if not customers:
+            QMessageBox.information(self, "Bookings", "No bookings available.")
+            return
+        bookings = "\n".join([f"{name}: Room {data['room']}, Check-in: {data['check_in']}, "
+                              f"Check-out: {data['check_out']}, Cost: ₱{data['cost']}, Points: {data['points']}"
+                              for name, data in customers.items()])
+        QMessageBox.information(self, "All Bookings", bookings)
+
+    def view_loyalty_points(self):
+        name = self.name_input.text().strip()
+        if name in customers:
+            points = customers[name]["points"]
+            QMessageBox.information(self, "Loyalty Points", f"{name} has {points} loyalty points.")
+        else:
+            QMessageBox.warning(self, "No Data", "No loyalty points found for this customer.")
+
+    def cancel_booking(self):
+        name = self.name_input.text().strip()
+        if name in customers:
+            del customers[name]
+            QMessageBox.information(self, "Cancellation", f"Booking for {name} has been canceled.")
+        else:
+            QMessageBox.warning(self, "No Data", "No booking found for this customer.")
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = HotelReservationSystem()
+    window.show()
+    sys.exit(app.exec_())
